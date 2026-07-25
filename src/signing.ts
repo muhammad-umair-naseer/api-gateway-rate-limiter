@@ -24,9 +24,28 @@ export interface SignatureParts {
   body: string;
 }
 
-/** Canonical string that both sides hash. Order and separators are fixed. */
+/**
+ * Canonical string that both sides hash. Order and separators are fixed, and
+ * every variable-length, caller-controlled field is LENGTH-FRAMED.
+ *
+ * Why the byte-lengths matter: if we simply joined `path` and `body` with "\n",
+ * an attacker could move the boundary — e.g. sign for path="/a\nx", body="y" and
+ * replay it as path="/a", body="x\ny". Both collapse to the same "…/a\nx\ny…"
+ * string and thus the same HMAC, letting one signature authorize a different
+ * request. Prefixing each field with its byte length makes the framing
+ * unambiguous, so a signature binds to exactly one (path, body).
+ */
 function canonical(p: SignatureParts): string {
-  return [p.timestamp, p.method.toUpperCase(), p.path, p.body].join("\n");
+  const path = p.path;
+  const body = p.body;
+  return [
+    p.timestamp,
+    p.method.toUpperCase(),
+    Buffer.byteLength(path),
+    path,
+    Buffer.byteLength(body),
+    body,
+  ].join("\n");
 }
 
 export function sign(secret: string, p: SignatureParts): string {
