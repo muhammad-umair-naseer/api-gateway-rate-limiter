@@ -37,6 +37,7 @@ export class CircuitBreaker {
   private state: BreakerState = "closed";
   private consecutiveFailures = 0;
   private openedAt = 0;
+  private trialInFlight = false;
   private readonly now: () => number;
 
   constructor(private readonly opts: BreakerOptions) {
@@ -67,6 +68,18 @@ export class CircuitBreaker {
       throw new CircuitOpenError();
     }
 
+    // Half-open is a SINGLE-FLIGHT probe: exactly one request is allowed through
+    // to test the upstream; everyone else is short-circuited until it resolves.
+    // Without this guard, the instant the cooldown elapses every concurrent
+    // request sees "half_open" and stampedes the still-fragile upstream — the
+    // thundering-herd the breaker exists to prevent.
+    if (this.state === "half_open") {
+      if (this.trialInFlight) {
+        throw new CircuitOpenError();
+      }
+      this.trialInFlight = true;
+    }
+
     try {
       const result = await fn();
       this.onSuccess();
@@ -81,6 +94,7 @@ export class CircuitBreaker {
     // A successful trial in half-open (or any success) fully heals the breaker.
     this.consecutiveFailures = 0;
     this.state = "closed";
+    this.trialInFlight = false;
   }
 
   private onFailure(): void {
@@ -93,5 +107,6 @@ export class CircuitBreaker {
       this.state = "open";
       this.openedAt = this.now();
     }
+    this.trialInFlight = false;
   }
 }

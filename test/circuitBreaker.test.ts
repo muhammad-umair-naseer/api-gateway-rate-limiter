@@ -54,4 +54,35 @@ describe("CircuitBreaker", () => {
     await expect(cb.exec(boom)).rejects.toThrow(); // trial fails
     expect(cb.currentState).toBe("open");
   });
+
+  it("admits only ONE trial in half_open under concurrency (no thundering herd)", async () => {
+    const clock = fakeClock();
+    const cb = new CircuitBreaker({ failureThreshold: 1, cooldownMs: 1000, now: clock.now });
+
+    await expect(cb.exec(boom)).rejects.toThrow(); // open
+    clock.advance(1000); // cooldown elapsed -> half_open
+
+    let actualCalls = 0;
+    const slowProbe = () =>
+      new Promise((resolve) => {
+        actualCalls++;
+        setTimeout(() => resolve("ok"), 20);
+      });
+
+    // Fire 5 concurrent requests the instant the breaker half-opens.
+    const settled = await Promise.allSettled([
+      cb.exec(slowProbe),
+      cb.exec(slowProbe),
+      cb.exec(slowProbe),
+      cb.exec(slowProbe),
+      cb.exec(slowProbe),
+    ]);
+
+    // Exactly one request reached the (fragile) upstream; the rest were
+    // short-circuited instead of piling on.
+    expect(actualCalls).toBe(1);
+    expect(settled.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(settled.filter((r) => r.status === "rejected")).toHaveLength(4);
+    expect(cb.currentState).toBe("closed"); // the one probe succeeded -> healed
+  });
 });
