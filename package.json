@@ -10,6 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "demo": "tsx demo/mechanism.ts",
+    "demo:http": "tsx demo/http_demo.ts",
+    "sign": "tsx tools/sign.ts",
     "bench": "tsx bench/loadtest.ts",
     "typecheck": "tsc --noEmit"
   },
