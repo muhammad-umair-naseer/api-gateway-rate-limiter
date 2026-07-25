@@ -1,0 +1,24 @@
+{
+  "name": "api-gateway-rate-limiter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Distributed, atomic, per-tenant token-bucket rate limiter backed by Redis + Lua.",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "bench": "tsx bench/loadtest.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}
