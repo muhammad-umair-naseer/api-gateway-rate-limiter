@@ -137,10 +137,13 @@ export class Gateway {
       const up = await this.breakerFor(req.tenantId).exec(() =>
         callUpstream(req.tenantId, req.path),
       );
-      const headers: Record<string, string> = {
-        "content-type": "application/json",
-        "x-ratelimit-remaining": String(remaining),
-      };
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      // Only report remaining when we actually got a real count from Redis.
+      // On the degraded (Redis-down, fail-open) path there is no count, so we
+      // omit the header rather than emit a nonsensical -1.
+      if (!degraded && remaining >= 0) {
+        headers["x-ratelimit-remaining"] = String(remaining);
+      }
       if (degraded) headers["x-degraded"] = "true";
       return { status: up.status, body: up.body, headers };
     } catch (err) {
