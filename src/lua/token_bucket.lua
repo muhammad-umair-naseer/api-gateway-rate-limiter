@@ -62,20 +62,31 @@ end
 redis.call("HSET", key, "tokens", tokens, "ts", now)
 
 -- Expire idle buckets so Redis memory stays bounded: once a bucket could have
--- fully refilled from empty it carries no information, so let it evaporate.
-local ttl
+-- fully refilled from empty it carries no information, so let it evaporate and
+-- be re-created full on the next request (harmless — it would have refilled).
 if refill_rate > 0 then
-  ttl = math.ceil(capacity / refill_rate) + 1
+  redis.call("EXPIRE", key, math.ceil(capacity / refill_rate) + 1)
 else
-  ttl = 3600                                         -- frozen bucket: arbitrary cap
+  -- FROZEN bucket (refill_rate == 0): its remaining budget is meaningful
+  -- forever. If we let it expire, the next request would find no key, re-init
+  -- to full capacity, and hand out a brand-new budget — silently over-admitting
+  -- and violating the "exactly capacity, ever" invariant. So never expire it,
+  -- and clear any TTL a previous config may have left behind.
+  redis.call("PERSIST", key)
 end
-redis.call("EXPIRE", key, ttl)
 
--- Tell a throttled caller how long until it could succeed (for a Retry-After header).
+-- Tell a throttled caller how long until it could succeed (Retry-After hint).
+-- A value of -1 means "never retryable" — the request can never succeed as-is,
+-- so a well-behaved client should give up rather than hot-loop.
 local retry_after_ms = 0
-if allowed == 0 and refill_rate > 0 then
-  local deficit  = cost - tokens
-  retry_after_ms = math.ceil((deficit / refill_rate) * 1000)
+if allowed == 0 then
+  if cost > capacity then
+    retry_after_ms = -1                              -- exceeds bucket size; impossible
+  elseif refill_rate > 0 then
+    retry_after_ms = math.ceil(((cost - tokens) / refill_rate) * 1000)
+  else
+    retry_after_ms = -1                              -- frozen bucket never refills
+  end
 end
 
 -- Lua floats are truncated to ints on the way back to the client, so floor

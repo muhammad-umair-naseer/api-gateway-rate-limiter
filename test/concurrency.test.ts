@@ -59,6 +59,16 @@ describe("atomic Lua token bucket", () => {
       expect(allowed, `round ${round}`).toBe(CAPACITY);
     }
   });
+
+  it("frozen bucket (refillRate=0) never expires, so an emptied budget can't resurrect", async () => {
+    const limiter = new RateLimiter(redis);
+    await redis.del("rl:proof");
+    await limiter.consume("proof");
+
+    // A refillRate=0 bucket must persist forever; if it got a TTL it would
+    // expire, re-init to full, and silently hand out a second full budget.
+    expect(await redis.ttl("rl:proof")).toBe(-1); // -1 = key exists, no expiry
+  });
 });
 
 describe("naive non-atomic limiter (control group)", () => {
@@ -81,5 +91,22 @@ describe("naive non-atomic limiter (control group)", () => {
 
     // If atomicity didn't matter, this would also cap at CAPACITY. It doesn't.
     expect(maxAllowed).toBeGreaterThan(CAPACITY);
+  });
+
+  it("is CORRECT when called sequentially — proving only atomicity, not the math, differs", async () => {
+    // This isolates the variable. The naive limiter runs the identical
+    // token-bucket arithmetic as the Lua script; called one-at-a-time (no
+    // overlapping read/decide/write windows) it admits EXACTLY the quota, same
+    // as the atomic path. So the over-admission above is caused solely by the
+    // check-then-act race under concurrency — not by a different or buggy
+    // formula. That is what makes it a fair control group.
+    const naive = new NaiveRateLimiter(redis);
+    await redis.del("rl:naive:proof");
+
+    let allowed = 0;
+    for (let i = 0; i < N; i++) {
+      if ((await naive.consume("proof")).allowed) allowed++;
+    }
+    expect(allowed).toBe(CAPACITY);
   });
 });
