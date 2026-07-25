@@ -27,6 +27,9 @@ export const TENANTS: Record<string, TenantQuota> = {
   // Test tenant used by the concurrency proof: refillRate 0 freezes the bucket
   // so exactly `capacity` requests may ever pass — no refill noise in asserts.
   proof: { capacity: 100, refillRate: 0, secret: "proof-secret-do-not-ship" },
+  // Benchmark tenant: effectively unlimited so every request is admitted and we
+  // measure the limiter's raw decision latency, not throttling.
+  bench: { capacity: 1e9, refillRate: 1e9, secret: "bench-secret-do-not-ship" },
 };
 
 export function getTenant(tenantId: string): TenantQuota | undefined {
