@@ -4,7 +4,7 @@ A per-tenant, distributed **token-bucket rate limiter** that stays correct under
 concurrency across any number of processes — plus the gateway machinery around
 it: HMAC request signing, per-tenant circuit breakers, and graceful degradation.
 
-Built in one day as a **vertical slice**, not a product. The point is one hard
+Built as a **vertical slice**, not a product. The point is one hard
 thing done correctly and *proven*, not breadth. Node + TypeScript, Redis, Vitest.
 
 ```bash
@@ -217,7 +217,7 @@ npm run sign acme /api/hello   # prints a ready-to-run signed curl
 
 ## What's stubbed / not production-ready
 
-This is a one-day slice. The atomic limiter is the real, tested part; the rest is
+This is a focused slice. The atomic limiter is the real, tested part; the rest is
 scaffolding sized to demonstrate it. Deliberate cuts:
 
 - **Tenants & quotas are hardcoded** ([`src/tenants.ts`](src/tenants.ts)). Real
